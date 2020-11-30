@@ -1,0 +1,32 @@
+import maya.cmds as cmds
+
+sele = cmds.ls(selection = True)
+
+cam = cmds.listRelatives(sele, type = 'camera')
+
+if not cam:
+	raise ValueError('Please select a camera')
+else:
+	cam = cam[0]
+
+def cam_frustum(val, *args):
+	cmds.setAttr('%s.displayCameraFrustum' % cam, val)
+	cmds.setAttr('%s.displayCameraFarClip' % cam, val)
+	
+def far_clip(*args):
+	val = cmds.floatSliderGrp(slider, q = True, value = True)
+	cmds.setAttr('%s.farClipPlane' %cam, val, edit = True)	
+
+Wname = 'Lince : cam_fov_Display'
+
+if cmds.window(Wname, exists = True):
+	cmds.deleteUI(Wname)
+
+Wname = cmds.window( Wname, wh = (500, 50))
+row = cmds.rowLayout(numberOfColumns = 3)
+
+cmds.button(label = 'OFF ', bgc = (0,1,0), command = 'cam_frustum(0)')
+cmds.button(label = 'ON ',  bgc = (0,1,1), command = 'cam_frustum(1)')
+
+slider = cmds.floatSliderGrp(label = 'Fov Distance', min = 10, max = 1000, field = True, value = 50, dragCommand = far_clip)
+cmds.showWindow(Wname)
