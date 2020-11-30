@@ -1,0 +1,47 @@
+import maya.cmds as cmds
+
+
+def cam_settings(cam):
+	focal_length = cmds.camera(cam, q=True, fl=True)
+	focal_length = format(focal_length, '.2f')
+	camera_width = cmds.camera(cam, q = True, hfa = True)
+	camera_width = format(camera_width, '.2f')
+	camera_height = cmds.camera(cam, q = True, vfa = True)
+	camera_height = format(camera_height, '.2f')
+	
+	return focal_length, camera_width, camera_height
+
+sele = cmds.ls(orderedSelection=True)
+
+if len(sele) != 2:
+	raise ValueError('Select Parent camera first and then select the Child camera')
+
+else:
+	parent_camera = sele[0]
+	child_camera = sele[1]
+
+
+parent_camera_type = cmds.listRelatives(parent_camera, type = 'camera')
+child_camera_type = cmds.listRelatives(child_camera, type = 'camera')
+
+if not parent_camera_type or not child_camera_type:
+    raise ValueError("Select Parent camera first and then select the Child camera")
+
+if cam_settings(parent_camera_type) != cam_settings(child_camera_type):
+    cmds.warning("Camera settings are not matching. Ignore if intentional")
+
+
+loc = cmds.spaceLocator(n = 'track_camera')[0]
+cmds.parentConstraint( child_camera, loc , mo = False)
+cmds.delete(cn = True)
+
+child_camera_Grp = cmds.listRelatives(child_camera, parent = True)
+parent_camera_Grp = cmds.listRelatives(parent_camera, parent = True)
+
+cmds.parent(child_camera_Grp, loc)
+cmds.parentConstraint(parent_camera, loc, mo = False)
+cmds.scaleConstraint(parent_camera_Grp, loc, mo = False)
+cmds.select(loc)
+cmds.delete(cn = True)
+cmds.select(clear = True)
+
