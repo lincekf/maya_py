@@ -1,0 +1,10 @@
+import maya.cmds as cmds
+
+panel_name = cmds.getPanel(up = True)
+view_cam = cmds.modelPanel(panel_name, cam = True, q = True)
+
+cam_x = cmds.getAttr('%s.translateX' % view_cam)
+cam_y = cmds.getAttr('%s.translateY' % view_cam)
+cam_z = cmds.getAttr('%s.translateZ' % view_cam)
+
+cmds.manipMoveContext('Move', e=True, mode=6, ot = (cam_x, cam_y, cam_z))
