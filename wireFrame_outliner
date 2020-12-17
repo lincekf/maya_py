@@ -1,0 +1,148 @@
+import maya.cmds as cmds
+from pymel.all import *
+
+
+def view_settings():
+
+	# This function is to setup some custom view settings for every panels depends up on the types of cameras . Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
+
+	# picking up only cameras from maya scene
+	all_cameras = cmds.ls(type = "camera")
+	
+	cams_default = [] # cameras that needed default material 
+	pan_default = [] # panel names of cameras those needed default material
+
+	cams_NO_default = [] # cameras that needed red material to be applyed for wireframe look
+	pan_NO_default = [] # panel names of cameras those needed red material to be shown
+	
+	def find_panel(cams, pans):
+		for ca in cams:
+			for panelName in cmds.getPanel( type="modelPanel" ): # this line picks up all the model panels from the maya scene
+			    if cmds.modelPanel( panelName,query=True, camera=True) == ca[0]: # cross check the panel names with the camera names to organize the panels in to 2 lists.
+			    	pans.append(panelName)
+
+	# organizing cameras in to 2 seperate lists 
+	for i in all_cameras:
+		if i in ('sideShape' , 'frontShape' , 'perspShape' , 'topShape'):
+			i = cmds.listRelatives(i, parent = True) 
+			cams_default.append(i)
+		else:
+			i = cmds.listRelatives(i, parent = True) 
+			cams_NO_default.append(i)
+	
+	# calling the function to find panels of 2 lists of cameras and organize in to 2 lists of panels.
+	find_panel(cams_default, pan_default)
+	find_panel(cams_NO_default, pan_NO_default)
+	
+	# fixing view settings for panels
+	for pan in pan_NO_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, udm = False, rnm = 'ogsRenderer')
+	for pan in pan_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, udm = True, rnm = 'base_OpenGL_Renderer')
+	
+	return cams_default, cams_NO_default, pan_NO_default, pan_default	    	 		
+
+
+def assign_wire_mat(mesh1, mesh2):
+	
+	R,G,B = 1,0,0
+	
+	global color_shade
+	color_shade = cmds.shadingNode('lambert', asShader=True)
+	useBG_shade = cmds.shadingNode('useBackground', asShader = True)
+	cmds.setAttr(('%s.incandescence' %color_shade),R,G,B, type = 'double3')
+	cmds.setAttr(('%s.color' %color_shade), R,G,B, type = 'double3')
+	cmds.select(mesh1)
+	cmds.hyperShade(assign=color_shade)
+	cmds.select(mesh2)
+	cmds.hyperShade(assign=useBG_shade)
+	cmds.select(clear=True)
+	
+
+def edit_mat(R,G,B):
+	
+	cmds.setAttr(('%s.incandescence' %color_shade),R,G,B, type = 'double3', edit = True)
+	cmds.setAttr(('%s.color' %color_shade), R,G,B, type = 'double3')
+	  
+
+	
+
+
+def outline_tool( *args ):
+    
+    sele = cmds.ls(selection=True)
+    
+    for se in sele:
+        type_mesh = cmds.listRelatives(se, type='mesh')
+        if not type_mesh:
+            raise ValueError("Please select only mesh")
+
+	global dupli_sele
+	
+    dupli_sele = cmds.duplicate(returnRootsOnly=True, inputConnections=True, n='outLine_')
+    out_grp = cmds.group(empty=True, name='outLine_eniLtuo')
+    cmds.parent(dupli_sele, out_grp)
+
+	# Hiding the duplicated mesh from outline only # 
+    cmds.setAttr("%s.hiddenInOutliner" %out_grp,1)
+    mel.eval("AEdagNodeCommonRefreshOutliners;")
+
+ 
+
+
+	# Setting up duplicated mesh to act as a wireframe on edge
+    for du in dupli_sele:
+        cmds.polyMoveFacet(du, constructionHistory=True, localTranslate = [0,0,0.2]) # move overall faces of the mesh out side. "Think" value from the function will define the thickness
+        cmds.polyNormal(du, normalMode=0, constructionHistory=True) 
+        cmds.displayCull(du, backFaceCulling=True) 
+        cmds.rename('polyMoveFace1', du+'polyMoveFace')
+        cmds.setAttr(du + '.holdOut', 0)
+
+	assign_wire_mat(dupli_sele, sele)
+
+def delete_wire(*args):
+	cmds.delete('outLine_eniLtuo*')  
+	par = cmds.listConnections('*useBackground*', d = True, t = 'mesh')
+	cmds.select(par)
+	cmds.hyperShade(assign = 'lambert1')
+	cmds.select(clear=True)
+	
+def outline_viewset(*args):
+	outline_tool()
+	view_settings()
+
+def main_win(*args):
+    if cmds.window('win',exists=True):
+        cmds.deleteUI('win')
+    win = cmds.window('win',title='Wire Outline',wh=[270,200])
+    cmds.columnLayout()
+    cmds.separator(h = 10)
+    But1 = cmds.button(label = 'Wire_Outline', c = outline_viewset)
+
+    cmds.separator(h = 10)
+    But2 = cmds.button(label='delete', c=delete_wire)
+
+    cmds.separator(h=10)
+    
+    def line_width(*args):
+        val = cmds.floatSliderGrp(slider, q = True, value = True)
+        for du in dupli_sele:
+            cmds.setAttr('%spolyMoveFace.localTranslateZ' %du, val, edit=True)
+
+
+    slider = cmds.floatSliderGrp(label = 'width', min = 0.1, max = 2, value = 0.1, cc = line_width, field = True)
+    cmds.separator(h = 10)
+
+    cmds.rowLayout(numberOfColumns = 8)
+    cmds.separator(style = 'none', w = 105)
+    cmds.text(l = 'Color')
+    cmds.button(l = '', bgc = [1,0,0], c = 'edit_mat(1,0,0)')
+    cmds.button(l = '', bgc = [0,1,0], c = 'edit_mat(0,1,0)')
+    cmds.button(l = '', bgc = [0,0,1], c = 'edit_mat(0,0,1)')
+    cmds.button(l = '', bgc = [1,0,1], c = 'edit_mat(1,0,1)')
+    cmds.button(l = '', bgc = [0,1,1], c = 'edit_mat(0,1,1)')
+    cmds.button(l = '', bgc = [1,1,0], c = 'edit_mat(1,1,0)')
+
+    cmds.showWindow()
+
+main_win()
