@@ -1,0 +1,213 @@
+import maya.cmds as cmds
+
+# We are importing pymel module as we are using some mel commands here. 
+from pymel.all import *
+
+
+def view_settings():
+
+	# This function is to setup some custom view settings for every panels depends up on the types of cameras . Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
+
+	# picking up only cameras from maya scene
+	all_cameras = cmds.ls(type = "camera")
+	
+	cams_default = [] # cameras that needed default material 
+	pan_default = [] # panel names of cameras those needed default material
+
+	cams_NO_default = [] # cameras that needed red material to be applyed for wireframe look
+	pan_NO_default = [] # panel names of cameras those needed red material to be shown
+	
+	def find_panel(cams, pans):
+		for ca in cams:
+			for panelName in cmds.getPanel( type="modelPanel" ): # this line picks up all the model panels from the maya scene
+			    if cmds.modelPanel( panelName,query=True, camera=True) == ca[0]: # cross check the panel names with the camera names to organize the panels in to 2 lists.
+			    	pans.append(panelName)
+
+	# organizing cameras in to 2 seperate lists 
+	for i in all_cameras:
+		if i in ('sideShape' , 'frontShape' , 'perspShape' , 'topShape'):
+			i = cmds.listRelatives(i, parent = True) 
+			cams_default.append(i)
+		else:
+			i = cmds.listRelatives(i, parent = True) 
+			cams_NO_default.append(i)
+	
+	# calling the function to find panels of 2 lists of cameras and organize in to 2 lists of panels.
+	find_panel(cams_default, pan_default)
+	find_panel(cams_NO_default, pan_NO_default)
+	
+	# fixing view settings for panels
+	for pan in pan_NO_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, udm = False, rnm = 'ogsRenderer')
+	for pan in pan_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, udm = True, rnm = 'base_OpenGL_Renderer')
+	
+	return cams_default, cams_NO_default, pan_NO_default, pan_default	    	 		
+
+
+def assign_wire_mat(mesh1, mesh2):
+	
+	R,G,B = 1,0,0
+	
+	global color_shade
+	color_shade = cmds.shadingNode('lambert', asShader=True)
+	useBG_shade = cmds.shadingNode('useBackground', asShader = True)
+	cmds.setAttr(('%s.incandescence' %color_shade),R,G,B, type = 'double3')
+	cmds.setAttr(('%s.color' %color_shade), R,G,B, type = 'double3')
+
+    # mesh1 will be for outline & mesh2 will be for inside geo
+	cmds.select(mesh1)
+	cmds.hyperShade(assign=color_shade)
+	cmds.select(mesh2)
+	cmds.hyperShade(assign=useBG_shade)
+	cmds.select(clear=True)
+	
+
+def edit_mat(R,G,B):
+	
+	cmds.setAttr(('%s.incandescence' %color_shade),R,G,B, type = 'double3', edit = True)
+	cmds.setAttr(('%s.color' %color_shade), R,G,B, type = 'double3')
+	  
+
+	
+
+
+def outline_tool( *args ):
+    
+    # Condition to make one selection for the code to run 
+    sele = cmds.ls(selection=True)
+    if not sele:
+        raise ValueError("please select atleast one outline mesh")
+    
+    # creating one set that later will be used to store all the outline mesh.
+    cmds.sets(n = 'set_OutLine_eniLtuO')
+
+    # condition to select only mesh. 
+    for se in sele:
+        type_mesh = cmds.listRelatives(se, type='mesh')
+        if not type_mesh:
+            raise ValueError("Please select only mesh")
+
+	global dupli_sele
+	
+    # duplicating all the selected mesh and giving a name for it.
+    dupli_sele = cmds.duplicate(returnRootsOnly=True, inputConnections=True, n='OutLine_eniLtuO_')
+    
+    # Finding out the parent set of the original selection
+    sele_set = cmds.listConnections(sele, t = 'objectSet')
+
+    # Adding the duplicated mesh in to the same set that the original sele belongs.
+    cmds.sets(add = sele_set[0])
+
+    # making a group and adding the duplicated mesh in to that group.
+    out_grp = cmds.group(empty=True, name='outLine_eniLtuo')
+    cmds.parent(dupli_sele, out_grp)
+
+	# MEL COMMAND # # Hiding the duplicated mesh from outline only # 
+    cmds.setAttr("%s.hiddenInOutliner" %out_grp,1)
+    mel.eval("AEdagNodeCommonRefreshOutliners;")
+
+	# Setting up duplicated mesh to act as a wireframe on edge
+    for du in dupli_sele:
+        cmds.polyMoveFacet(du, constructionHistory=True, localTranslate = [0,0,0.2]) # move overall faces of the mesh out side. "Think" value from the function will define the thickness
+        cmds.polyNormal(du, normalMode=0, constructionHistory=True) 
+        cmds.displayCull(du, backFaceCulling=True) 
+        cmds.rename('polyMoveFace1', du+'polyMoveFace')
+        cmds.setAttr(du + '.holdOut', 0)
+
+    # Applying materials to the selected mesh and also to the duplicated  mesh.
+	assign_wire_mat(dupli_sele, sele)
+
+def delete_wire(*args):
+	
+    sele = cmds.ls(selection=True)
+    if not sele:
+        raise ValueError("please select atleast one outline mesh")
+
+    Found_set = cmds.listConnections(sele, t = 'objectSet')
+
+    set_no_duplicates = []
+    # condition to find set that the sele belongs and adding that sets to a list.
+    if Found_set:
+        for set in Found_set:
+            if set not in set_no_duplicates:
+                set_no_duplicates.append(set)
+
+    # listing the contents of the set. basically that will be the duplicated geo & original mesh
+    set_lis = cmds.sets( set_no_duplicates, q=True )
+
+    # deleting the parent group of all the contents that name contains 'OutLine_eniLtuO' & assigning lambert1 to the rest of contents. 
+    if set_lis:
+        for li in set_lis:
+            if 'OutLine_eniLtuO' in li:
+                parent_Group = cmds.listRelatives(li, p=True)
+                cmds.delete(parent_Group)
+            else:
+                cmds.select(li)
+                cmds.hyperShade(assign = 'lambert1')
+                cmds.select(clear = True)
+        cmds.delete(set_no_duplicates)
+
+
+# we cant 2 functions inside a single button . So, merging 2 functions inside another function.
+def outline_viewset(*args):
+	outline_tool()
+	view_settings()
+
+
+#################################################################################
+
+##      Front End COde ############
+
+#################################################################################
+
+
+# STarting the UI with a class
+
+class Wire_outline(object):
+
+    window_name = 'Wire Outline:v01'
+
+    def show(self):
+    
+        if cmds.window(self.window_name, query = True, exists = True):
+            cmds.deleteUI(self.window_name)
+    
+        # Below line will make a window with No minimize/maximize option. Scaling disabled. 
+        # Fixed a position on the screen where the window supposed to open. 
+        cmds.window(self.window_name, tlc = [200,200], mnb = False, mxb = False, s = True)
+
+        self.Build_Wire_Outline_UI()
+
+        cmds.showWindow()
+    
+    # This function will set the width of the outline.
+    def line_width(self, *args):
+        val = cmds.floatSliderGrp(self.slider, q = True, value = True)
+        for du in dupli_sele:
+            cmds.setAttr('%spolyMoveFace.localTranslateZ' %du, val, edit=True)
+
+    def Build_Wire_Outline_UI(self):
+        
+        cmds.columnLayout( columnAttach=('both', 5), rowSpacing=10, columnWidth=400 )
+
+        cmds.separator(style = 'none', h = 5)
+        cmds.button(l = 'Wire OutLine', bgc = [0.8,0.8,0.9], c = outline_viewset )
+        
+        self.slider = cmds.floatSliderGrp(min = 0.05, max = 3, value = 0.2, cc = self.line_width, field = True)
+
+        self.colo = cmds.rowLayout(numberOfColumns = 10)
+
+        cmds.text(l = 'Color')
+        cmds.button(l = '', bgc = [1,0,0], c = lambda *args: edit_mat(1,0,0))
+        cmds.button(l = '', bgc = [0,1,0], c = lambda *args: edit_mat(0,1,0))
+        cmds.button(l = '', bgc = [0,0,1], c = lambda *args: edit_mat(0,0,1))
+        cmds.button(l = '', bgc = [1,0,1], c = lambda *args: edit_mat(1,0,1))
+        cmds.button(l = '', bgc = [0,1,1], c = lambda *args: edit_mat(0,1,1))
+        cmds.button(l = '', bgc = [1,1,0], c = lambda *args: edit_mat(1,1,0))
+
+        cmds.separator(style = 'none', w = 50)
+        cmds.button('Delete Outline', bgc = [1,0,0] , c=delete_wire)
+
+
+Wire_outline().show()
