@@ -1,0 +1,230 @@
+import maya.cmds as cmds
+
+# We are importing pymel module as we are using some mel commands here. 
+from pymel.all import *
+
+
+def view_settings():
+
+	# This function is to setup some custom view settings for every panels depends up on the types of cameras . Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
+
+	# picking up only cameras from maya scene
+	all_cameras = cmds.ls(type = "camera")
+	
+	cams_default = [] # cameras that needed default material 
+	pan_default = [] # panel names of cameras those needed default material
+
+	cams_NO_default = [] # cameras that needed red material to be applyed for wireframe look
+	pan_NO_default = [] # panel names of cameras those needed red material to be shown
+	
+	def find_panel(cams, pans):
+		for ca in cams:
+			for panelName in cmds.getPanel( type="modelPanel" ): # this line picks up all the model panels from the maya scene
+			    if cmds.modelPanel( panelName,query=True, camera=True) == ca[0]: # cross check the panel names with the camera names to organize the panels in to 2 lists.
+			    	pans.append(panelName)
+
+	# organizing cameras in to 2 seperate lists 
+	for i in all_cameras:
+		if i in ('sideShape' , 'frontShape' , 'perspShape' , 'topShape'):
+			i = cmds.listRelatives(i, parent = True) 
+			cams_default.append(i)
+		else:
+			i = cmds.listRelatives(i, parent = True) 
+			cams_NO_default.append(i)
+	
+	# calling the function to find panels of 2 lists of cameras and organize in to 2 lists of panels.
+	find_panel(cams_default, pan_default)
+	find_panel(cams_NO_default, pan_NO_default)
+	
+	# fixing view settings for panels
+	for pan in pan_NO_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, useDefaultMaterial = False, rendererName = 'ogsRenderer')
+	for pan in pan_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, useDefaultMaterial = True, rendererName = 'base_OpenGL_Renderer')
+	
+	return cams_default, cams_NO_default, pan_NO_default, pan_default	    	 		
+
+
+def use_BG_mat(mesh):
+		
+    useBG_shade = cmds.shadingNode('useBackground', asShader = True)
+    cmds.select(mesh)
+    cmds.hyperShade(assign=useBG_shade)
+    cmds.select(clear=True)
+
+def edit_wire_color(R,G,B):
+	
+    for t in toon_shape_names:
+        cmds.setAttr(('%s.profileColor'% t[0]), R,G,B, type = 'double3')
+        cmds.setAttr(('%s.creaseColor' % t[0]), R,G,B, type = 'double3')
+        cmds.setAttr(('%s.borderColor' % t[0]), R,G,B, type = 'double3')
+	
+def outline():
+    sele = cmds.ls(selection = True)
+    
+    # MEL command to apply ToonShader
+    mel.eval("assignNewPfxToon;")
+    
+    # below 2 lines will add the toonshader that was assigned above to a variable called 'too'
+    sele_shape = cmds.listRelatives(sele)
+    too = cmds.listConnections(sele_shape, t = 'pfxToon')
+    
+    global toon_names
+    global toon_shape_names
+    
+    # below sets of commands will be useful when there are multiple toon shaders assigned
+    toon_names = []
+    toon_shape_names = []
+    if too:
+        for t in too:
+            if t not in toon_names:
+                toon_names.append(t)
+                
+    if toon_names:
+        for t in toon_names:
+            sh = cmds.listRelatives(t)
+            toon_shape_names.append(sh)
+    
+    # apply specific material color to every toonshader that was selected. 
+    for t in toon_shape_names:
+        cmds.setAttr(('%s.profileColor' %t[0]), 1,0,0, type = 'double3')
+        cmds.setAttr(('%s.creaseColor' % t[0]), 1,0,0, type = 'double3')
+        cmds.setAttr(('%s.borderColor' % t[0]), 1,0,0, type = 'double3')
+   
+
+	
+
+
+def outline_tool( *args ):
+    
+    # Condition to check if there is a selcetion.  
+    sele = cmds.ls(selection=True)
+    if not sele:
+        raise ValueError("please select atleast one polygon")
+
+    # condition to select only mesh. 
+    for se in sele:
+        type_mesh = cmds.listRelatives(se, type='mesh')
+        if not type_mesh:
+            raise ValueError("Please select only polygon")
+
+	# creating one SET with a specific name. Making this set here in this line will add the current selection on to this set. 
+    cmds.sets(n = 'set_OutLine_eniLtuO')
+
+    # Running the outline function that was created earlier
+    outline()
+
+    # Finding out the parent set of the original selection
+    Parent_sele_set = cmds.listConnections(sele, type = 'objectSet')
+
+    # Adding the toonShader in to the set. 
+    cmds.sets(add = Parent_sele_set[0])
+
+    # making a group and adding the toonshader in to that group.
+    out_grp = cmds.group(empty=True, name='outLine_eniLtuo')
+    cmds.parent(toon_names, out_grp)
+
+	# MEL COMMAND # # Hiding the above group from outline  # 
+    cmds.setAttr("%s.hiddenInOutliner" %out_grp,1)
+    mel.eval("AEdagNodeCommonRefreshOutliners;")
+
+    # Applying material to the selection.
+    use_BG_mat(sele)
+
+def delete_wire(*args):
+	
+    main_selection = cmds.ls(selection = True)
+
+    # forloop to consider if there are multiple selection.
+    for se in main_selection:
+        
+        
+        # IfElse condiion to check the user selected a mesh or a toon shape. Both conditions eventually will find out the list of sets that the selection belongs. 
+        sha = cmds.listRelatives(se)[0]
+        if cmds.objectType(sha) == 'pfxToon':
+            parent_set = cmds.listConnections(sha, type = 'objectSet')
+            set_lis = cmds.sets( parent_set, q=True )
+    
+        else :
+            parent_set = cmds.listConnections(se, type = 'objectSet')
+            set_lis = cmds.sets( parent_set, q=True )
+
+    # delete the toonshader parent group and apply lambert1 material to the original mesh. (both will be found inside the parent set anyways)
+    if set_lis:
+        for li in set_lis:
+            if 'pfxToonShape' in li:
+                parent_Group = cmds.listRelatives((cmds.listRelatives(li, p=True)), p=True)
+                cmds.delete(parent_Group)
+            else:
+                cmds.select(li)
+                cmds.hyperShade(assign = 'lambert1')
+                cmds.select(clear = True)
+
+        # delete the parent set 
+        cmds.delete(parent_set[0])
+        
+
+
+
+# we cant have 2 functions inside a single button . So, merging 2 functions inside another function.
+def outline_viewset(*args):
+	outline_tool()
+	view_settings()
+
+
+#################################################################################
+
+##      Front End COde ############
+
+#################################################################################
+
+
+# STarting the UI with a class
+
+class Wire_outline(object):
+
+    window_name = 'Lince - Wire Outline:v02'
+
+    def show(self):
+    
+        if cmds.window(self.window_name, query = True, exists = True):
+            cmds.deleteUI(self.window_name)
+    
+        # Below line will make a window with No minimize/maximize option. Scaling disabled. 
+        # Fixed a position on the screen where the window supposed to open. 
+        cmds.window(self.window_name, tlc = [200,200], mnb = False, mxb = False, s = True)
+
+        self.Build_Wire_Outline_UI()
+
+        cmds.showWindow()
+    
+    # This function will set the width of the outline.
+    def outline_width(self, *args):
+        val = cmds.floatSliderGrp(self.slider, q = True, value = True)
+        for too in toon_shape_names:
+            cmds.setAttr("%s.lineWidth" %too[0] , val, edit = True)
+
+    def Build_Wire_Outline_UI(self):
+        
+        cmds.columnLayout( columnAttach=('both', 5), rowSpacing=10, columnWidth=400 )
+
+        cmds.separator(style = 'none', h = 5)
+        cmds.button(l = 'Wire OutLine', bgc = [0.8,0.8,0.9], c = outline_viewset )
+        
+        self.slider = cmds.floatSliderGrp(min = 0.01, max = 4, value = 0.1, cc = self.outline_width, field = True)
+
+        cmds.rowLayout(numberOfColumns = 10)
+
+        cmds.text(l = 'Color')
+        cmds.button(l = '', bgc = [1,0,0], c = lambda *args: edit_wire_color(1,0,0))
+        cmds.button(l = '', bgc = [0,1,0], c = lambda *args: edit_wire_color(0,1,0))
+        cmds.button(l = '', bgc = [0,0,1], c = lambda *args: edit_wire_color(0,0,1))
+        cmds.button(l = '', bgc = [1,0,1], c = lambda *args: edit_wire_color(1,0,1))
+        cmds.button(l = '', bgc = [0,1,1], c = lambda *args: edit_wire_color(0,1,1))
+        cmds.button(l = '', bgc = [1,1,0], c = lambda *args: edit_wire_color(1,1,0))
+
+        cmds.separator(style = 'none', w = 50)
+        cmds.button('Delete Outline', bgc = [1,0,0] , c=delete_wire)
+
+
+Wire_outline().show()
