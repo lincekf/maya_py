@@ -1,10 +1,18 @@
 import maya.cmds as cmds
 
+# This line will pick the panel, based on the mouse pointer position 
 panel_name = cmds.getPanel(underPointer = True)
-view_cam = cmds.modelPanel(panel_name, camera = True, query = True)
 
-cam_x = cmds.getAttr('%s.translateX' % view_cam)
-cam_y = cmds.getAttr('%s.translateY' % view_cam)
-cam_z = cmds.getAttr('%s.translateZ' % view_cam)
+# to check if the panel is a camera or not 
+view_cam = cmds.modelPanel(panel_name, exists = True, camera = True, query = True)
 
-obj_piv = cmds.manipMoveContext('Move', edit=True, mode=6, orientTowards = (cam_x, cam_y, cam_z))
+if view_cam == True:
+    # if the panel has a camera in it, then this line of code will find its translate values and add it in a tuple
+    cam_attrs = cmds.getAttr('%s.translate' %(cmds.modelPanel(panel_name,camera = True, query = True)))
+else:
+    raise ValueError("please keep the mouse pointer on a camera view")
+
+# Selected objects custom pivot will orient towards the active camera 
+# Thus let us to move the object accurately away or closer to the camera.  
+obj_piv = cmds.manipMoveContext('Move', edit=True, mode=6, orientTowards = (cam_attrs[0]))
+
