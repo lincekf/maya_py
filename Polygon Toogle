@@ -1,13 +1,21 @@
 import maya.cmds as cmds
 
-# poly off
-myPanel = cmds.getPanel(underPointer=True)
-cmds.modelEditor(myPanel, edit = True,polymeshes = False)
+def poly_Off():
+    myPanel = cmds.getPanel(underPointer=True)
+    cmds.modelEditor(myPanel, edit = True,polymeshes = False)
+
+poly_Off()
+
+
+
 
 
 
 import maya.cmds as cmds
 
-# poly ON
-myPanel = cmds.getPanel(underPointer=True)
-cmds.modelEditor(myPanel, edit = True,polymeshes = True)
+def poly_ON():
+    myPanel = cmds.getPanel(underPointer=True)
+    cmds.modelEditor(myPanel, edit = True,polymeshes = True)
+
+poly_ON()
+
