@@ -1,0 +1,47 @@
+import maya.cmds as cmds 
+import json
+
+def material_lib():
+    mat = []
+    mat_lib = {}
+    
+    sele = cmds.ls(selection = True)
+    sele_shape = cmds.listRelatives(sele)
+    
+    for shape in sele_shape:
+        lis = cmds.listConnections(shape, type = 'shadingEngine')
+        mat.append(lis)
+        
+    for i in range(len(sele)):    
+        mat_lib[sele[i]] = [mat[i][0]]
+    
+    with open('C:/Users/User/Documents/maya/2017/scripts/Lince/wire_dict/material_store_02.json', 'w') as jsonfile:
+        json.dump(mat_lib, jsonfile)
+        print 'material saved to the json file successfully'
+
+material_lib()
+
+
+def restore_mat():
+    
+    sele = cmds.ls(selection = True)
+    
+    for se in sele:
+        with open('C:/Users/User/Documents/maya/2017/scripts/Lince/wire_dict/material_store_02.json', 'r') as jsonfile:
+            data = json.load(jsonfile)
+            
+        cmds.select(se)
+        
+        if se not in data:
+            cmds.hyperShade(assign = 'lambert1')
+           
+        else:
+            cmds.hyperShade(assign=data[se][0])
+            cmds.select(clear=True)
+
+        
+restore_mat()
+        
+    
+
+    
