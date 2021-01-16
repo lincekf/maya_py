@@ -1,0 +1,362 @@
+#**********************************
+#* LINCE FRANCIS KOLLANOOR	      *	
+#* LINCEKF@GMAIL.COM			  *  	
+#* Wireframe_outline_v5           *
+#**********************************
+
+
+
+
+import maya.cmds as cmds
+import json
+import os
+
+# We are importing pymel module as we are using some mel commands here. 
+from pymel.all import *
+
+# Setting up json file to store the material info:
+path = cmds.internalVar(userAppDir = True)
+fullpath = os.path.join(path, 'MM_wireOutline')
+name = 'outline_material_Library_01'
+json_location = os.path.join(fullpath , '%s.json' %name)
+
+
+
+def view_settings():
+
+	# This function is to setup some custom view settings for every panels depends up on the types of cameras . Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
+
+	# picking up only cameras from maya scene
+	all_cameras = cmds.ls(type = "camera")
+	
+    # cameras that needed default settings . # panel names of cameras those needed default settings
+	# cameras that needed outline settings to be applyed for wireframe look. # panel names of cameras those needed outline settings to be shown
+	cams_default, panel_default, cam_outline, panel_outline = [], [], [], [] 
+    
+
+	def find_panel(cams, pans):
+		for ca in cams:
+			for panelName in cmds.getPanel( type="modelPanel" ): # this line picks up all the model panels from the maya scene
+			    if cmds.modelPanel( panelName,query=True, camera=True) == ca[0]: # cross check the panel names with the camera names to organize the panels in to 2 lists.
+			    	pans.append(panelName)
+
+	# organizing cameras in to 2 seperate lists 
+	for i in all_cameras:
+		if i in ('sideShape' , 'frontShape' , 'perspShape' , 'topShape'):
+			i = cmds.listRelatives(i, parent = True) 
+			cams_default.append(i)
+		else:
+			i = cmds.listRelatives(i, parent = True) 
+			cam_outline.append(i)
+	
+	# calling the function to find panels of 2 lists of cameras and organize in to 2 lists of panels.
+	find_panel(cams_default, panel_default)
+	find_panel(cam_outline, panel_outline)
+	
+	# fixing view settings for panels
+	for pan in panel_outline:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, useDefaultMaterial = False, rendererName = 'ogsRenderer')
+	for pan in panel_default:
+		cmds.modelEditor(pan, edit = True, wireframeOnShaded = False, useDefaultMaterial = True, strokes = False,  rendererName = 'base_OpenGL_Renderer')
+	
+	return cams_default, cam_outline, panel_outline, panel_default	    	 		
+
+        
+def material_lib(sele):
+
+    mat_lib = {}
+    
+    for i in sele:
+        sele_shape = cmds.listRelatives(i)
+        mat = cmds.listConnections(sele_shape,type='shadingEngine')
+        mat_lib[i] = mat[0]
+
+
+    
+    if not os.path.exists(fullpath):
+        
+        os.mkdir(fullpath)
+        with open(json_location, 'w') as jsonfile:
+            json.dump(mat_lib, jsonfile)
+    else:
+        with open(json_location, 'r') as x:
+            data = json.load(x)
+            with open(json_location, 'w') as x:
+                data.update(mat_lib)
+                json.dump(data, x)
+
+        
+
+
+
+def use_BG_mat(sele):
+    
+    material_lib(sele)
+    useBG_shade = cmds.shadingNode('useBackground', asShader = True)
+    cmds.select(sele)
+    cmds.hyperShade(assign=useBG_shade)
+    cmds.select(clear=True)
+
+def edit_wire_color(R,G,B):
+
+    sele = cmds.ls(selection = True)
+
+    if sele:
+
+        for se in sele:
+            relative = cmds.listRelatives(se)[0]
+
+            if (cmds.objectType(relative) == 'mesh' or cmds.objectType(relative) == 'nurbsSurface'):
+                toon_shape = cmds.listConnections(relative, type = 'pfxToon')[0]
+            elif cmds.objectType(relative) == 'pfxToon':
+                toon_shape = se
+
+            cmds.setAttr(('%s.profileColor'% toon_shape), R,G,B, type = 'double3')
+            cmds.setAttr(('%s.creaseColor' % toon_shape), R,G,B, type = 'double3')
+            cmds.setAttr(('%s.borderColor' % toon_shape), R,G,B, type = 'double3')
+    else:
+        for t in toon_shape_names:
+            cmds.setAttr(('%s.profileColor' %t[0]), R,G,B, type = 'double3')
+            cmds.setAttr(('%s.creaseColor' % t[0]), R,G,B, type = 'double3')
+            cmds.setAttr(('%s.borderColor' % t[0]), R,G,B, type = 'double3')
+
+	
+def outline():
+
+    global toon_names
+    global toon_shape_names
+    
+    toon_names = []
+    toon_shape_names = []
+
+    sele = cmds.ls(selection = True)
+    
+    for se in sele:
+
+        cmds.select(se)
+        # MEL command to apply ToonShader
+        mel.eval("assignNewPfxToon;")
+        cmds.selectType( str=False )
+
+        
+        # below 2 lines will add the toonshader that was assigned above to a variable called 'too'
+        sele_shape = cmds.listRelatives(se)
+        too = cmds.listConnections(sele_shape, t = 'pfxToon')
+        
+
+        if too:
+            for t in too:
+                if t not in toon_names:
+                    toon_names.append(t)
+                    
+        if toon_names:
+            for t in toon_names:
+                sh = cmds.listRelatives(t)
+                toon_shape_names.append(sh)
+    
+    # apply specific material color to every toonshader that was selected. 
+    for t in toon_shape_names:
+        cmds.setAttr(('%s.profileColor' %t[0]), 1,0,0, type = 'double3')
+        cmds.setAttr(('%s.creaseColor' % t[0]), 1,0,0, type = 'double3')
+        cmds.setAttr(('%s.borderColor' % t[0]), 1,0,0, type = 'double3')
+	
+
+
+def outline_tool( *args ):
+    
+    # Condition to check if there is a selcetion.  
+    sele = cmds.ls(selection=True)
+    if not sele:
+        raise ValueError("please select atleast one polygon")
+
+    # condition to select only mesh. 
+    for se in sele:
+        selected_shape = cmds.listRelatives(se, shapes= True)[0]
+        
+        sele_type = cmds.nodeType(selected_shape)
+
+        if not (sele_type == 'mesh' or sele_type == 'nurbsSurface'):
+
+            raise ValueError("Please select only polygon / Nurbs Surface")
+
+    # Running the outline function that was created earlier
+    outline()
+
+    # making a group and adding the toonshader in to that group.
+    out_grp = cmds.group(empty=True, name='outLine_eniLtuo')
+    cmds.parent(toon_names, out_grp)
+
+	# MEL COMMAND # # Hiding the above group from outline  # 
+    cmds.setAttr("%s.hiddenInOutliner" %out_grp,1)
+    mel.eval("AEdagNodeCommonRefreshOutliners;")
+
+    # Applying material to the selection.
+    use_BG_mat(sele)
+
+def delete_wire(*args):
+	
+    sele = cmds.ls(selection = True)
+
+    if os.path.exists(fullpath):
+        with open(json_location, 'r') as jsonfile:
+            data = json.load(jsonfile)
+    else:
+        data = {}
+
+    for se in sele:
+        
+        relative = cmds.listRelatives(se)[0]
+        
+        if (cmds.objectType(relative) == 'mesh' or cmds.objectType(relative) == 'nurbsSurface'):
+            toon_shape = cmds.listConnections(relative, type = 'pfxToon')
+            if not toon_shape:
+                error('please select one outline object')
+            else:
+                toon_shape = toon_shape [0]
+            mesh = se
+        elif cmds.objectType(relative) == 'pfxToon':
+            toon_shape = se
+            mesh = cmds.listConnections(relative, type = 'mesh')
+            if not mesh:
+                mesh = cmds.listConnections(relative, type = 'nurbsSurface')
+                if not mesh:
+                    error("please select one valid object")
+                else:
+                    mesh = mesh [0]
+            else:
+                mesh = mesh [0]
+
+        else:
+            error ('please select a valid object')
+        cmds.select(mesh)
+
+        if mesh not in data:
+            cmds.hyperShade(assign = 'lambert1')  
+        else:
+            cmds.hyperShade(assign=data[mesh])
+        
+        cmds.select(clear=True) 
+        cmds.delete(toon_shape)
+
+def kill_all(*args):
+
+    all_toon = cmds.ls(type = 'pfxToon')
+
+    if os.path.exists(fullpath):
+        with open(json_location, 'r') as jsonfile:
+            data = json.load(jsonfile)
+    else:
+        data = {}
+
+    for toon in all_toon:
+        mesh = cmds.listConnections(toon, shapes = True)[0]
+        if cmds.objectType(mesh) == 'mesh':
+            mesh = cmds.listConnections(toon)[0]
+
+        else:
+            mesh = cmds.listConnections(toon)[1]
+            if cmds.objectType(cmds.listConnections(toon)[0]) == 'nurbsTessellate':
+                pass
+        
+        cmds.select(mesh)
+
+        if mesh not in data:
+            cmds.hyperShade(assign = 'lambert1')  
+        else:
+            cmds.hyperShade(assign=data[mesh])
+        cmds.delete(cmds.listRelatives(toon, p = True))
+        cmds.select(clear = True)
+
+
+
+
+
+# we cant have 2 functions inside a single button . So, merging 2 functions inside another function.
+def outline_viewset(*args):
+	outline_tool()
+	view_settings()
+
+
+#################################################################################
+
+##      Front End COde ############
+
+#################################################################################
+
+
+# STarting the UI with a class
+
+class Wire_outline(object):
+
+    window_name = 'LFK tool - Wire Outline: v05'
+
+    def show(self):
+    
+        if cmds.window(self.window_name, query = True, exists = True):
+            cmds.deleteUI(self.window_name)
+    
+        # Below line will make a window with No minimize/maximize option. Scaling disabled. 
+        # Fixed a position on the screen where the window supposed to open. 
+        cmds.window(self.window_name, tlc = [300,300], mnb = False, mxb = False, s = True)
+
+        self.Build_Wire_Outline_UI()
+
+        cmds.showWindow()
+    
+    # This function will set the width of the outline.
+    def outline_width(self, *args):
+        val = cmds.floatSliderGrp(self.slider, q = True, value = True)
+
+        sele = cmds.ls(selection = True)
+
+        if sele:
+            for se in sele:
+                relative = cmds.listRelatives(se)[0]
+
+                if (cmds.objectType(relative) == 'mesh' or cmds.objectType(relative) == 'nurbsSurface'):
+                    toon_shape = cmds.listConnections(relative, type = 'pfxToon')[0]
+                elif cmds.objectType(relative) == 'pfxToon':
+                    toon_shape = se
+                cmds.setAttr("%s.lineWidth" %toon_shape , val, edit = True)
+        
+        else:
+            for too in toon_shape_names:
+                cmds.setAttr("%s.lineWidth" %too[0] , val, edit = True)
+
+    def Build_Wire_Outline_UI(self):
+        
+        cmds.rowColumnLayout( numberOfRows = 8 )
+
+        cmds.separator(style = 'none', h = 5)
+        cmds.button(l = 'OutLine', bgc = [0.8,0.8,0.9], c = outline_tool )
+        cmds.separator(style = 'none', h = 10)
+
+        cmds.button(l = 'Smart OutLine', bgc = [0.8,0.5,0.6], c = outline_viewset )
+
+        cmds.separator(style = 'none', h = 10)
+
+        self.slider = cmds.floatSliderGrp(minValue = 0.001, maxValue = 4, value = 0.01, sliderStep= 0.001, cc = self.outline_width, field = True)
+
+        cmds.separator(style = 'none', h = 10)
+        
+        cmds.rowLayout(numberOfColumns = 10)
+        
+
+        cmds.text(l = 'Color')
+        cmds.button(l = '', bgc = [1,0,0], c = lambda *args: edit_wire_color(1,0,0))
+        cmds.button(l = '', bgc = [0,1,0], c = lambda *args: edit_wire_color(0,1,0))
+        cmds.button(l = '', bgc = [0,0,1], c = lambda *args: edit_wire_color(0,0,1))
+        cmds.button(l = '', bgc = [1,0,1], c = lambda *args: edit_wire_color(1,0,1))
+        cmds.button(l = '', bgc = [0,1,1], c = lambda *args: edit_wire_color(0,1,1))
+        cmds.button(l = '', bgc = [1,1,0], c = lambda *args: edit_wire_color(1,1,0))
+
+        cmds.separator(style = 'none', w = 10)
+        cmds.button('Del selected', bgc = [1,0,0] , c=delete_wire)
+        cmds.button('Kill_All', bgc = [1,.8,.5] , c=kill_all)
+
+
+
+Wire_outline().show()
+
+
+
