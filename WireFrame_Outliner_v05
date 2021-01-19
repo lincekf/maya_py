@@ -24,7 +24,8 @@ json_location = os.path.join(fullpath , '%s.json' %name)
 
 def view_settings():
 
-	# This function is to setup some custom view settings for every panels depends up on the types of cameras . Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
+	# This function is to setup some custom view settings for every panels depends up on the types of cameras . 
+    # Enable/Disable shaded wireframe, default material options. Activate hardware render etc. 
 
 	# picking up only cameras from maya scene
 	all_cameras = cmds.ls(type = "camera")
@@ -65,14 +66,14 @@ def view_settings():
 def material_lib(sele):
 
     mat_lib = {}
-    
+
+    # finding the materials of the selected objects. and adding that to a dict    
     for i in sele:
         sele_shape = cmds.listRelatives(i)
         mat = cmds.listConnections(sele_shape,type='shadingEngine')
         mat_lib[i] = mat[0]
 
-
-    
+    # creating a local folder with json file if not exist and adding this dict inside
     if not os.path.exists(fullpath):
         
         os.mkdir(fullpath)
@@ -88,7 +89,7 @@ def material_lib(sele):
         
 
 
-
+# This function will make a json file to store the existing materials and apply useBG material to the selection. 
 def use_BG_mat(sele):
     
     material_lib(sele)
@@ -97,6 +98,7 @@ def use_BG_mat(sele):
     cmds.hyperShade(assign=useBG_shade)
     cmds.select(clear=True)
 
+# lets us to change the outline color of the selected object / toonshape
 def edit_wire_color(R,G,B):
 
     sele = cmds.ls(selection = True)
@@ -123,23 +125,22 @@ def edit_wire_color(R,G,B):
 	
 def outline():
 
+    # adding 2 global variables , so that it can be reused later.
     global toon_names
     global toon_shape_names
     
-    toon_names = []
-    toon_shape_names = []
+    toon_names, toon_shape_names = [], []
 
     sele = cmds.ls(selection = True)
     
     for se in sele:
 
         cmds.select(se)
+
         # MEL command to apply ToonShader
         mel.eval("assignNewPfxToon;")
         cmds.selectType( str=False )
-
-        
-        # below 2 lines will add the toonshader that was assigned above to a variable called 'too'
+       
         sele_shape = cmds.listRelatives(se)
         too = cmds.listConnections(sele_shape, t = 'pfxToon')
         
@@ -154,7 +155,7 @@ def outline():
                 sh = cmds.listRelatives(t)
                 toon_shape_names.append(sh)
     
-    # apply specific material color to every toonshader that was selected. 
+    # apply red color to every toonshader that was created. 
     for t in toon_shape_names:
         cmds.setAttr(('%s.profileColor' %t[0]), 1,0,0, type = 'double3')
         cmds.setAttr(('%s.creaseColor' % t[0]), 1,0,0, type = 'double3')
@@ -186,7 +187,7 @@ def outline_tool( *args ):
     out_grp = cmds.group(empty=True, name='outLine_eniLtuo')
     cmds.parent(toon_names, out_grp)
 
-	# MEL COMMAND # # Hiding the above group from outline  # 
+	# MEL COMMAND for Hiding the above created group from outline  # 
     cmds.setAttr("%s.hiddenInOutliner" %out_grp,1)
     mel.eval("AEdagNodeCommonRefreshOutliners;")
 
@@ -197,16 +198,19 @@ def delete_wire(*args):
 	
     sele = cmds.ls(selection = True)
 
+    # below condition will check if there is a json file exists to retrive the material infos. 
     if os.path.exists(fullpath):
         with open(json_location, 'r') as jsonfile:
             data = json.load(jsonfile)
     else:
         data = {}
 
+
     for se in sele:
         
         relative = cmds.listRelatives(se)[0]
         
+        # below command will cross check if the selected object has an ouline applied or not. 
         if (cmds.objectType(relative) == 'mesh' or cmds.objectType(relative) == 'nurbsSurface'):
             toon_shape = cmds.listConnections(relative, type = 'pfxToon')
             if not toon_shape:
@@ -230,6 +234,7 @@ def delete_wire(*args):
             error ('please select a valid object')
         cmds.select(mesh)
 
+        # if there are no material to rerieve then the below code will apply the basic lambert material .
         if mesh not in data:
             cmds.hyperShade(assign = 'lambert1')  
         else:
@@ -238,6 +243,8 @@ def delete_wire(*args):
         cmds.select(clear=True) 
         cmds.delete(toon_shape)
 
+
+# This function will remove all the outlines from the scene and retrieve back all the original materials. 
 def kill_all(*args):
 
     all_toon = cmds.ls(type = 'pfxToon')
@@ -284,11 +291,11 @@ def outline_viewset(*args):
 #################################################################################
 
 
-# STarting the UI with a class
+# Starting the UI with a class
 
 class Wire_outline(object):
 
-    window_name = 'LFK tool - Wire Outline: v05'
+    window_name = 'LFK tool - Wire Outline: V5'
 
     def show(self):
     
@@ -296,8 +303,7 @@ class Wire_outline(object):
             cmds.deleteUI(self.window_name)
     
         # Below line will make a window with No minimize/maximize option. Scaling disabled. 
-        # Fixed a position on the screen where the window supposed to open. 
-        cmds.window(self.window_name, tlc = [300,300], mnb = False, mxb = False, s = True)
+        cmds.window(self.window_name, tlc = [300,300], mnb = False, mxb = False, s = False)
 
         self.Build_Wire_Outline_UI()
 
